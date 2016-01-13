@@ -7,7 +7,9 @@ Launch [Lutris](http://lutris.net) games through  [RetroArch](http://libretro.co
 ## Installation
 
 1. Install [Lutris](https://lutris.net/)
+
 2. Install [RetroArch](http://libretro.com)
+
 3. Download the [Lutro Lutris Launcher](http://github.com/RobLoach/lutro-lutris)
 
   ```
