@@ -17,5 +17,5 @@ Launch [Lutris](http://lutris.net) games through  [RetroArch](http://libretro.co
 4. Launch RetroArch with the Lutro core:
 
   ```
-  retroarch -L "/usr/lib/libretro/lutro_libretro.so" path/to/lutro-lutris
+  retroarch -L "/usr/lib/libretro/lutro_libretro.so" lutro-lutris
   ```
