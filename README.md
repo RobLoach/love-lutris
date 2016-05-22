@@ -13,7 +13,7 @@ Launch [Lutris](http://lutris.net) games through  [RetroArch](http://libretro.co
 3. Download the [Lutro Lutris Launcher](http://github.com/RobLoach/lutro-lutris)
 
   ```
-  git clone https://github.com/RobLoach/lutro-lutris.git
+  git clone --recursive https://github.com/RobLoach/lutro-lutris.git
   ```
 
 4. Launch RetroArch with the Lutro core:
