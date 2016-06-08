@@ -32,9 +32,6 @@ function lib.load()
 
 	lineHeight = 20
 	currentSelection = 1
-	keyHoldTimer = 0
-	keyHoldResetTime = 1000
-	keySpeed = 5000
 
 	logo = lib.graphics.newImage('resources/logo.png')
 end
@@ -57,58 +54,32 @@ function lib.draw()
 	end
 end
 
--- Update
-if (lutro ~= nil) then
-	function lutro.update(dt)
-		-- Up
-		if lib.input.joypad("up") == 1 and keyHoldTimer <= 0 then
-			currentSelection = currentSelection - 1
-			keyHoldTimer = keyHoldResetTime
-			if currentSelection < 1 then
-				currentSelection = 1
-			end
-		-- Down
-		elseif lib.input.joypad("down") == 1 and keyHoldTimer <= 0 then
-			currentSelection = currentSelection + 1
-			keyHoldTimer = keyHoldResetTime
-			if currentSelection > table.getn(games) then
-				currentSelection = table.getn(games)
-			end
-		-- Select
-		elseif (lib.input.joypad("start") == 1 or lib.input.joypad("b") == 1 or lib.input.joypad("y") == 1 or lib.input.joypad("a") == 1 or lib.input.joypad("x") == 1) and keyHoldTimer <= 0 then
-			keyHoldTimer = keyHoldResetTime * 2
-			game = games[currentSelection]
-			launchGame(game.slug)
-		else
-			keyHoldTimer = keyHoldTimer - dt * keySpeed
+-- Process input
+function lib.keypressed(key)
+	if key == "down" then
+		currentSelection = currentSelection + 1
+		if currentSelection > table.getn(games) then
+			currentSelection = table.getn(games)
 		end
-	end
-else
-	function love.keypressed(key)
-		if key == "down" then
-			currentSelection = currentSelection + 1
-			if currentSelection > table.getn(games) then
-				currentSelection = table.getn(games)
-			end
-		elseif key == "up" then
-			currentSelection = currentSelection - 1
-			if currentSelection < 1 then
-				currentSelection = 1
-			end
-		elseif key == "return" then
-			game = games[currentSelection]
-			launchGame(game.slug)
+	elseif key == "up" then
+		currentSelection = currentSelection - 1
+		if currentSelection < 1 then
+			currentSelection = 1
 		end
+	elseif key == "return" then
+		game = games[currentSelection]
+		launchGame(game.slug)
 	end
 end
 
+-- Launch the given game slug through Lutris.
 function launchGame(slug)
 	--os.execute('lutris lutris:' .. game.slug)
 	local f = io.popen('lutris lutris:' .. slug)
 	f:close()
 end
 
--- Retrieve the installed Lutro games
+-- Retrieve the installed Lutro games.
 function getInstalledGames()
 	-- Dependencies
 	local json = require('lunajson')
