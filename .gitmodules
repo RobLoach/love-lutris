@@ -1,3 +1,0 @@
-[submodule "vendor/lunajson"]
-	path = vendor/lunajson
-	url = https://github.com/grafi-tt/lunajson

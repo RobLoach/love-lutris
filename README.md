@@ -13,19 +13,14 @@ Launch [Lutris](http://lutris.net) games through [Love2D](https://love2d.org/), 
 2. Install [Love2D](https://love2d.org)
 
 3. Download the [Lutro Lutris Launcher](http://github.com/RobLoach/lutro-lutris)
-  ```
-  git clone --recursive https://github.com/RobLoach/lutro-lutris.git
-  ```
+	```
+	git clone https://github.com/RobLoach/lutro-lutris.git
+	```
 
-4. Download vendor libraries ([lunajson](https://github.com/grafi-tt/lunajson))
-  ```
-  make
-  ```
-
-5. Launch Love2D with the Lutris launcher:
-  ```
-  love lutro-lutris
-  ```
+4. Launch Love2D with the Lutris launcher:
+	```
+	love lutro-lutris
+	```
 
 ### [RetroArch](http://libretro.com)
 
@@ -35,17 +30,7 @@ Launch [Lutris](http://lutris.net) games through [Love2D](https://love2d.org/), 
 
 3. Install the [libretro-lutro](https://github.com/libretro/libretro-lutro) core
 
-4. Download the [Lutro Lutris Launcher](http://github.com/RobLoach/lutro-lutris)
-  ```
-  git clone --recursive https://github.com/RobLoach/lutro-lutris.git
-  ```
-
-5. Download vendor libraries ([lunajson](https://github.com/grafi-tt/lunajson))
-  ```
-  make
-  ```
-
-6. Launch RetroArch with the Lutro core:
-  ```
-  retroarch -L "/usr/lib/libretro/lutro_libretro.so" lutro-lutris
-  ```
+4. Launch RetroArch with the Lutro core:
+	```
+	retroarch -L "/usr/lib/libretro/lutro_libretro.so" lutro-lutris
+	```
