@@ -25,6 +25,12 @@ function lib.load()
 		name = 'Launch Lutris',
 	})
 
+	-- Allow the user to launch Lutro.
+	table.insert(games, {
+		slug = 'quit',
+		name = 'Quit Lutris Launcher',
+	})
+
 	-- Initialization
 	if (lutro ~= nil) then
 		font = lib.graphics.newImageFont('resources/font.png', ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/')
@@ -75,9 +81,13 @@ end
 
 -- Launch the given game slug through Lutris.
 function launchGame(slug)
-	--os.execute('lutris lutris:' .. game.slug)
-	local f = io.popen('lutris lutris:' .. slug)
-	f:close()
+	if (slug == 'quit') then
+		lib.event.quit(0)
+	else
+		--os.execute('lutris lutris:' .. game.slug)
+		local f = io.popen('lutris lutris:' .. slug)
+		f:close()
+	end
 end
 
 -- Retrieve the installed Lutro games.
