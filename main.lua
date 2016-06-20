@@ -1,4 +1,4 @@
-lib = nil
+local lib = nil
 if (love ~= nil) then
   lib = love
 elseif (lutro ~= nil) then
@@ -26,8 +26,10 @@ function lib.load()
 	})
 
 	-- Initialization
-	font = lib.graphics.newImageFont('resources/font.png', ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/')
-	lib.graphics.setFont(font)
+	if (lutro ~= nil) then
+		font = lib.graphics.newImageFont('resources/font.png', ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/')
+		lib.graphics.setFont(font)
+	end
 	lib.graphics.setBackgroundColor(1, 53, 146)
 
 	lineHeight = 20
@@ -38,7 +40,6 @@ end
 
 -- Draw
 function lib.draw()
-	lib.graphics.clear()
 	lib.graphics.draw(logo, lineHeight, lineHeight)
 
 	-- Show each game.
@@ -66,7 +67,7 @@ function lib.keypressed(key)
 		if currentSelection < 1 then
 			currentSelection = 1
 		end
-	elseif key == "return" then
+	elseif key == "return" or key == "x" then
 		game = games[currentSelection]
 		launchGame(game.slug)
 	end

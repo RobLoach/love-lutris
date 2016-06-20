@@ -1,4 +1,4 @@
-lib = nil
+local lib = nil
 if (love ~= nil) then
   lib = love
 elseif (lutro ~= nil) then
@@ -13,6 +13,6 @@ function lib.conf(t)
 	t.version = '0.10.1'
 	t.identity = 'lutro-lutris'
 	t.description = "Lutris game launcher for RetroArch/Love2D"
-	t.width = 1280
-	t.height = 720
+	t.width = 800
+	t.height = 600
 end
