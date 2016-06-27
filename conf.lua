@@ -15,4 +15,8 @@ function lib.conf(t)
 	t.description = "Lutris game launcher for RetroArch/Love2D"
 	t.width = 1440
 	t.height = 900
+	if t.window then
+		t.window.width = t.width
+		t.window.height = t.height
+	end
 end
