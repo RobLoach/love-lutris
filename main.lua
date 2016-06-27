@@ -33,12 +33,16 @@ function lib.load()
 
 	-- Initialization
 	if (lutro ~= nil) then
-		font = lib.graphics.newImageFont('resources/font.png', ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/')
+		font = lutro.graphics.newImageFont("resources/sofia24.png",
+		" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 		lib.graphics.setFont(font)
 	end
-	lib.graphics.setBackgroundColor(1, 53, 146)
 
-	lineHeight = 20
+	-- Background
+	lib.graphics.setBackgroundColor(1, 53, 146)
+	bg = lutro.graphics.newImage("resources/bg.png")
+
+	lineHeight = 30
 	currentSelection = 1
 
 	logo = lib.graphics.newImage('resources/logo.png')
@@ -46,10 +50,12 @@ end
 
 -- Draw
 function lib.draw()
+	lutro.graphics.clear()
+	lutro.graphics.draw(bg, 0, 0)
 	lib.graphics.draw(logo, lineHeight, lineHeight)
 
 	-- Show each game.
-	local y = lineHeight * 2
+	local y = lineHeight * 4
 	for i, game in ipairs(games) do
 		-- Display the menu cursor if needed
 		if currentSelection == i then
