@@ -2,9 +2,11 @@
 
 Launch [Lutris](http://lutris.net) games through [Love2D](https://love2d.org/), or [RetroArch](http://libretro.com)+[Lutro](http://github.com/libretro/libretro-lutro).
 
-![Lutro Lutris Launcher Screenshot](resources/screenshot.png)
+![Lutro Lutris Launcher Screenshot](resources/screenshot.jpg)
 
 ## Installation
+
+Lutro Lutris Launcher can be used through either Love2D, or RetroArch/Lutro. Choose one below:
 
 ### [Love2D](http://love2d.org)
 
