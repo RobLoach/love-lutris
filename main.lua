@@ -44,6 +44,15 @@ function lib.load()
 	lib.graphics.setBackgroundColor(1, 53, 146)
 	bg = lib.graphics.newImage("resources/bg.png")
 
+	-- Sounds
+	soundBackground = lib.audio.newSource("resources/bgmusic.wav")
+	soundBackground:setVolume(0.1)
+	soundBackground:setLooping(true)
+	soundFocus = lib.audio.newSource("resources/focus.wav")
+	soundSelect = lib.audio.newSource("resources/select.wav")
+	lib.audio.play(soundBackground)
+
+	-- Settings
 	lineHeight = 30
 	currentSelection = 1
 
@@ -76,12 +85,18 @@ function lib.keypressed(key)
 		if currentSelection > table.getn(games) then
 			currentSelection = table.getn(games)
 		end
+		lib.audio.play(soundFocus)
+		soundBackground:setVolume(0.1)
 	elseif key == "up" then
 		currentSelection = currentSelection - 1
 		if currentSelection < 1 then
 			currentSelection = 1
 		end
+		lib.audio.play(soundFocus)
+		soundBackground:setVolume(0.1)
 	elseif key == "return" or key == "x" then
+		lib.audio.play(soundSelect)
+		soundBackground:setVolume(0)
 		game = games[currentSelection]
 		launchGame(game.slug)
 	end
