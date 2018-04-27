@@ -10,7 +10,7 @@ function lib.conf(t)
 	-- Application metadata
 	t.title = 'Lutris'
 	t.author = 'Rob Loach'
-	t.version = '0.10.1'
+	t.version = '11.0'
 	t.identity = 'lutro-lutris'
 	t.description = "Lutris game launcher for RetroArch/Love2D"
 	t.width = 1440

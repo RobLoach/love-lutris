@@ -45,11 +45,11 @@ function lib.load()
 	bg = lib.graphics.newImage("resources/bg.png")
 
 	-- Sounds
-	soundBackground = lib.audio.newSource("resources/bgmusic.wav")
+	soundBackground = lib.audio.newSource("resources/bgmusic.wav", "stream")
 	soundBackground:setVolume(0.1)
 	soundBackground:setLooping(true)
-	soundFocus = lib.audio.newSource("resources/focus.wav")
-	soundSelect = lib.audio.newSource("resources/select.wav")
+	soundFocus = lib.audio.newSource("resources/focus.wav", "static")
+	soundSelect = lib.audio.newSource("resources/select.wav", "static")
 	lib.audio.play(soundBackground)
 
 	-- Settings
