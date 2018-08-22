@@ -1,23 +1,33 @@
-local error = error
-local byte, char, find, gsub, match, sub = string.byte, string.char, string.find, string.gsub, string.match, string.sub
-local tonumber = tonumber
-local tostring, type, unpack = tostring, type, table.unpack or unpack
+local setmetatable, tonumber, tostring =
+      setmetatable, tonumber, tostring
+local floor, inf =
+      math.floor, math.huge
+local mininteger, tointeger =
+      math.mininteger or nil, math.tointeger or nil
+local byte, char, find, gsub, match, sub =
+      string.byte, string.char, string.find, string.gsub, string.match, string.sub
 
--- The function that interprets JSON strings is separated into another file so as to
--- use bitwise operation to speedup unicode codepoints processing on Lua 5.3.
-local genstrlib
-if _VERSION == "Lua 5.3" then
-	genstrlib = require 'lunajson._str_lib_lua53'
-else
-	genstrlib = require 'lunajson._str_lib'
+local function _parse_error(pos, errmsg)
+	error("parse error at " .. pos .. ": " .. errmsg, 2)
 end
 
+local f_str_ctrl_pat
+if _VERSION == "Lua 5.1" then
+	-- use the cluttered pattern because lua 5.1 does not handle \0 in a pattern correctly
+	f_str_ctrl_pat = '[^\32-\255]'
+else
+	f_str_ctrl_pat = '[\0-\31]'
+end
+
+local type, unpack = type, table.unpack or unpack
+
 local _ENV = nil
+
 
 local function nop() end
 
 local function newparser(src, saxtbl)
-	local json, jsonnxt
+	local json, jsonnxt, rec_depth
 	local jsonlen, pos, acc = 0, 1, 0
 
 	-- `f` is the temporary for dispatcher[c] and
@@ -73,15 +83,15 @@ local function newparser(src, saxtbl)
 		return c
 	end
 
-	local function parseerror(errmsg)
-		error("parse error at " .. acc + pos .. ": " .. errmsg)
+	local function parse_error(errmsg)
+		return _parse_error(acc + pos, errmsg)
 	end
 
 	local function tellc()
-		return tryc() or parseerror("unexpected termination")
+		return tryc() or parse_error("unexpected termination")
 	end
 
-	local function spaces() -- skip spaces and prepare the next char
+	local function spaces()  -- skip spaces and prepare the next char
 		while true do
 			f, pos = find(json, '^[ \n\r\t]*', pos)
 			if pos ~= jsonlen then
@@ -89,7 +99,7 @@ local function newparser(src, saxtbl)
 				return
 			end
 			if jsonlen == 0 then
-				parseerror("unexpected termination")
+				parse_error("unexpected termination")
 			end
 			jsonnxt()
 		end
@@ -99,7 +109,7 @@ local function newparser(src, saxtbl)
 		Invalid
 	--]]
 	local function f_err()
-		parseerror('invalid value')
+		parse_error('invalid value')
 	end
 
 	--[[
@@ -110,7 +120,7 @@ local function newparser(src, saxtbl)
 		for i = 1, targetlen do
 			local c = tellc()
 			if byte(target, i) ~= c then
-				parseerror("invalid char")
+				parse_error("invalid char")
 			end
 			pos = pos+1
 		end
@@ -146,13 +156,13 @@ local function newparser(src, saxtbl)
 
 	--[[
 		Numbers
-		Conceptually, the longest prefix that matches to `(0|[1-9][0-9]*)(\.[0-9]*)?([eE][+-]?[0-9]*)?`
-		(in regexp) is captured as a number and its conformance to the JSON spec is checked.
+		Conceptually, the longest prefix that matches to `[-+.0-9A-Za-z]+` (in regexp)
+		is captured as a number and its conformance to the JSON spec is checked.
 	--]]
 	-- deal with non-standard locales
 	local radixmark = match(tostring(0.5), '[^0-9]')
 	local fixedtonumber = tonumber
-	if radixmark ~= '.' then -- deals with non-standard locales
+	if radixmark ~= '.' then
 		if find(radixmark, '%W') then
 			radixmark = '%' .. radixmark
 		end
@@ -161,10 +171,15 @@ local function newparser(src, saxtbl)
 		end
 	end
 
+	local function number_error()
+		return parse_error('invalid number')
+	end
+
 	-- fallback slow parser
 	local function generic_number(mns)
 		local buf = {}
 		local i = 1
+		local is_int = true
 
 		local c = byte(json, pos)
 		pos = pos+1
@@ -178,108 +193,143 @@ local function newparser(src, saxtbl)
 
 		if c == 0x30 then
 			nxt()
+			if c and 0x30 <= c and c < 0x3A then
+				number_error()
+			end
 		else
 			repeat nxt() until not (c and 0x30 <= c and c < 0x3A)
 		end
 		if c == 0x2E then
+			is_int = false
 			nxt()
 			if not (c and 0x30 <= c and c < 0x3A) then
-				parseerror('invalid number')
+				number_error()
 			end
 			repeat nxt() until not (c and 0x30 <= c and c < 0x3A)
 		end
 		if c == 0x45 or c == 0x65 then
+			is_int = false
 			nxt()
 			if c == 0x2B or c == 0x2D then
 				nxt()
 			end
 			if not (c and 0x30 <= c and c < 0x3A) then
-				parseerror('invalid number')
+				number_error()
 			end
 			repeat nxt() until not (c and 0x30 <= c and c < 0x3A)
+		end
+		if c and (0x41 <= c and c <= 0x5B or
+		          0x61 <= c and c <= 0x7B or
+		          c == 0x2B or c == 0x2D or c == 0x2E) then
+			number_error()
 		end
 		pos = pos-1
 
 		local num = char(unpack(buf))
-		num = fixedtonumber(num)-0.0
+		num = fixedtonumber(num)
 		if mns then
 			num = -num
+			if num == mininteger and is_int then
+				num = mininteger
+			end
 		end
 		return sax_number(num)
 	end
 
 	-- `0(\.[0-9]*)?([eE][+-]?[0-9]*)?`
 	local function f_zro(mns)
-		local postmp = pos
-		local num
-		local c = byte(json, postmp)
+		local num, c = match(json, '^(%.?[0-9]*)([-+.A-Za-z]?)', pos)  -- skipping 0
 
-		if c == 0x2E then -- is this `.`?
-			num = match(json, '^.[0-9]*', pos) -- skipping 0
-			local numlen = #num
-			if numlen == 1 then
-				pos = pos-1
+		if num == '' then
+			if pos > jsonlen then
+				pos = pos - 1
 				return generic_number(mns)
 			end
-			postmp = pos + numlen
-			c = byte(json, postmp)
-		end
-
-		if c == 0x45 or c == 0x65 then -- is this e or E?
-			local numexp = match(json, '^[^eE]*[eE][-+]?[0-9]+', pos)
-			if not numexp then
-				pos = pos-1
-				return generic_number(mns)
+			if c == '' then
+				if mns then
+					return sax_number(-0.0)
+				end
+				return sax_number(0)
 			end
-			if num then -- since `0e.*` is always 0.0, ignore those
-				num = numexp
-			end
-			postmp = pos + #numexp
-		end
 
-		if postmp > jsonlen then
+			if c == 'e' or c == 'E' then
+				num, c = match(json, '^([^eE]*[eE][-+]?[0-9]+)([-+.A-Za-z]?)', pos)
+				if c == '' then
+					pos = pos + #num
+					if pos > jsonlen then
+						pos = pos - #num - 1
+						return generic_number(mns)
+					end
+					if mns then
+						return sax_number(-0.0)
+					end
+					return sax_number(0.0)
+				end
+			end
 			pos = pos-1
 			return generic_number(mns)
 		end
-		pos = postmp
-		if num then
-			num = fixedtonumber(num)
-		else
-			num = 0.0
+
+		if byte(num) ~= 0x2E or byte(num, -1) == 0x2E then
+			pos = pos-1
+			return generic_number(mns)
 		end
+
+		if c ~= '' then
+			if c == 'e' or c == 'E' then
+				num, c = match(json, '^([^eE]*[eE][-+]?[0-9]+)([-+.A-Za-z]?)', pos)
+			end
+			if c ~= '' then
+				pos = pos-1
+				return generic_number(mns)
+			end
+		end
+
+		pos = pos + #num
+		if pos > jsonlen then
+			pos = pos - #num - 1
+			return generic_number(mns)
+		end
+		c = fixedtonumber(num)
+
 		if mns then
-			num = -num
+			c = -c
 		end
-		return sax_number(num)
+		return sax_number(c)
 	end
 
 	-- `[1-9][0-9]*(\.[0-9]*)?([eE][+-]?[0-9]*)?`
 	local function f_num(mns)
 		pos = pos-1
-		local num = match(json, '^.[0-9]*%.?[0-9]*', pos)
-		if byte(num, -1) == 0x2E then
+		local num, c = match(json, '^([0-9]+%.?[0-9]*)([-+.A-Za-z]?)', pos)
+		if byte(num, -1) == 0x2E then  -- error if ended with period
 			return generic_number(mns)
 		end
-		local postmp = pos + #num
-		local c = byte(json, postmp)
 
-		if c == 0x45 or c == 0x65 then -- e or E?
-			num = match(json, '^[^eE]*[eE][-+]?[0-9]+', pos)
-			if not num then
+		if c ~= '' then
+			if c ~= 'e' and c ~= 'E' then
 				return generic_number(mns)
 			end
-			postmp = pos + #num
+			num, c = match(json, '^([^eE]*[eE][-+]?[0-9]+)([-+.A-Za-z]?)', pos)
+			if not num or c ~= '' then
+				return generic_number(mns)
+			end
 		end
 
-		if postmp > jsonlen then
+		pos = pos + #num
+		if pos > jsonlen then
+			pos = pos - #num
 			return generic_number(mns)
 		end
-		pos = postmp
-		num = fixedtonumber(num)-0.0
+		c = fixedtonumber(num)
+
 		if mns then
-			num = -num
+			c = -c
+			if c == mininteger and not find(num, '[^0-9]') then
+				c = mininteger
+			end
 		end
-		return sax_number(num)
+		return sax_number(c)
 	end
 
 	-- skip minus sign
@@ -297,15 +347,122 @@ local function newparser(src, saxtbl)
 				end
 			end
 		end
-		parseerror("invalid number")
+		parse_error("invalid number")
 	end
 
 	--[[
 		Strings
 	--]]
-	local f_str_lib = genstrlib(parseerror)
-	local f_str_surrogateok = f_str_lib.surrogateok -- whether codepoints for surrogate pair are correctly paired
-	local f_str_subst = f_str_lib.subst -- the function passed to gsub that interprets escapes
+	local f_str_hextbl = {
+		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+		0x8, 0x9, inf, inf, inf, inf, inf, inf,
+		inf, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, inf,
+		inf, inf, inf, inf, inf, inf, inf, inf,
+		inf, inf, inf, inf, inf, inf, inf, inf,
+		inf, inf, inf, inf, inf, inf, inf, inf,
+		inf, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+	}
+	f_str_hextbl.__index = function()
+		return inf
+	end
+	setmetatable(f_str_hextbl, f_str_hextbl)
+
+	local f_str_escapetbl = {
+		['"']  = '"',
+		['\\'] = '\\',
+		['/']  = '/',
+		['b']  = '\b',
+		['f']  = '\f',
+		['n']  = '\n',
+		['r']  = '\r',
+		['t']  = '\t'
+	}
+	f_str_escapetbl.__index = function()
+		parse_error("invalid escape sequence")
+	end
+	setmetatable(f_str_escapetbl, f_str_escapetbl)
+
+	local function surrogate_first_error()
+		return parse_error("1st surrogate pair byte not continued by 2nd")
+	end
+
+	local f_str_surrogate_prev = 0
+	local function f_str_subst(ch, ucode)
+		if ch == 'u' then
+			local c1, c2, c3, c4, rest = byte(ucode, 1, 5)
+			ucode = f_str_hextbl[c1-47] * 0x1000 +
+			        f_str_hextbl[c2-47] * 0x100 +
+			        f_str_hextbl[c3-47] * 0x10 +
+			        f_str_hextbl[c4-47]
+			if ucode ~= inf then
+				if ucode < 0x80 then  -- 1byte
+					if rest then
+						return char(ucode, rest)
+					end
+					return char(ucode)
+				elseif ucode < 0x800 then  -- 2bytes
+					c1 = floor(ucode / 0x40)
+					c2 = ucode - c1 * 0x40
+					c1 = c1 + 0xC0
+					c2 = c2 + 0x80
+					if rest then
+						return char(c1, c2, rest)
+					end
+					return char(c1, c2)
+				elseif ucode < 0xD800 or 0xE000 <= ucode then  -- 3bytes
+					c1 = floor(ucode / 0x1000)
+					ucode = ucode - c1 * 0x1000
+					c2 = floor(ucode / 0x40)
+					c3 = ucode - c2 * 0x40
+					c1 = c1 + 0xE0
+					c2 = c2 + 0x80
+					c3 = c3 + 0x80
+					if rest then
+						return char(c1, c2, c3, rest)
+					end
+					return char(c1, c2, c3)
+				elseif 0xD800 <= ucode and ucode < 0xDC00 then  -- surrogate pair 1st
+					if f_str_surrogate_prev == 0 then
+						f_str_surrogate_prev = ucode
+						if not rest then
+							return ''
+						end
+						surrogate_first_error()
+					end
+					f_str_surrogate_prev = 0
+					surrogate_first_error()
+				else  -- surrogate pair 2nd
+					if f_str_surrogate_prev ~= 0 then
+						ucode = 0x10000 +
+								(f_str_surrogate_prev - 0xD800) * 0x400 +
+								(ucode - 0xDC00)
+						f_str_surrogate_prev = 0
+						c1 = floor(ucode / 0x40000)
+						ucode = ucode - c1 * 0x40000
+						c2 = floor(ucode / 0x1000)
+						ucode = ucode - c2 * 0x1000
+						c3 = floor(ucode / 0x40)
+						c4 = ucode - c3 * 0x40
+						c1 = c1 + 0xF0
+						c2 = c2 + 0x80
+						c3 = c3 + 0x80
+						c4 = c4 + 0x80
+						if rest then
+							return char(c1, c2, c3, c4, rest)
+						end
+						return char(c1, c2, c3, c4)
+					end
+					parse_error("2nd surrogate pair byte appeared without 1st")
+				end
+			end
+			parse_error("invalid unicode codepoint literal")
+		end
+		if f_str_surrogate_prev ~= 0 then
+			f_str_surrogate_prev = 0
+			surrogate_first_error()
+		end
+		return f_str_escapetbl[ch] .. ucode
+	end
 
 	local function f_str(iskey)
 		local pos2 = pos
@@ -313,7 +470,7 @@ local function newparser(src, saxtbl)
 		local str = ''
 		local bs
 		while true do
-			while true do -- search '\' or '"'
+			while true do  -- search '\' or '"'
 				newpos = find(json, '[\\"]', pos2)
 				if newpos then
 					break
@@ -325,20 +482,32 @@ local function newparser(src, saxtbl)
 					pos2 = 1
 				end
 				jsonnxt()
+				if jsonlen == 0 then
+					parse_error("unterminated string")
+				end
 			end
-			if byte(json, newpos) == 0x22 then -- break if '"'
+			if byte(json, newpos) == 0x22 then  -- break if '"'
 				break
 			end
-			pos2 = newpos+2 -- skip '\<char>'
-			bs = true -- remember that backslash occurs
+			pos2 = newpos+2  -- skip '\<char>'
+			bs = true  -- mark the existence of a backslash
 		end
 		str = str .. sub(json, pos, newpos-1)
 		pos = newpos+1
 
-		if bs then -- check if backslash occurs
-			str = gsub(str, '\\(.)([^\\]*)', f_str_subst) -- interpret escapes
-			if not f_str_surrogateok() then
-				parseerror("invalid surrogate pair")
+		if find(str, f_str_ctrl_pat) then
+			parse_error("unescaped control string")
+		end
+		if bs then  -- a backslash exists
+			-- We need to grab 4 characters after the escape char,
+			-- for encoding unicode codepoint to UTF-8.
+			-- As we need to ensure that every first surrogate pair byte is
+			-- immediately followed by second one, we grab upto 5 characters and
+			-- check the last for this purpose.
+			str = gsub(str, '\\(.)([^\\]?[^\\]?[^\\]?[^\\]?[^\\]?)', f_str_subst)
+			if f_str_surrogate_prev ~= 0 then
+				f_str_surrogate_prev = 0
+				parse_error("1st surrogate pair byte not continued by 2nd")
 			end
 		end
 
@@ -353,31 +522,36 @@ local function newparser(src, saxtbl)
 	--]]
 	-- arrays
 	local function f_ary()
+		rec_depth = rec_depth + 1
+		if rec_depth > 1000 then
+			parse_error('too deeply nested json (> 1000)')
+		end
 		sax_startarray()
+
 		spaces()
-		if byte(json, pos) ~= 0x5D then -- check the closing bracket ']', that consists an empty array
+		if byte(json, pos) ~= 0x5D then  -- check closing bracket ']' which means the array empty
 			local newpos
 			while true do
-				f = dispatcher[byte(json, pos)] -- parse value
+				f = dispatcher[byte(json, pos)]  -- parse value
 				pos = pos+1
 				f()
-				f, newpos = find(json, '^[ \n\r\t]*,[ \n\r\t]*', pos) -- check comma
+				f, newpos = find(json, '^[ \n\r\t]*,[ \n\r\t]*', pos)  -- check comma
 				if not newpos then
-					f, newpos = find(json, '^[ \n\r\t]*%]', pos) -- check closing bracket
+					f, newpos = find(json, '^[ \n\r\t]*%]', pos)  -- check closing bracket
 					if newpos then
 						pos = newpos
 						break
 					end
-					spaces() -- since the current chunk can be ended, skip spaces toward following chunks
+					spaces()  -- since the current chunk can be ended, skip spaces toward following chunks
 					local c = byte(json, pos)
-					if c == 0x2C then -- check comma again
+					if c == 0x2C then  -- check comma again
 						pos = pos+1
 						spaces()
 						newpos = pos-1
-					elseif c == 0x5D then -- check closing bracket again
+					elseif c == 0x5D then  -- check closing bracket again
 						break
 					else
-						parseerror("no closing bracket of an array")
+						parse_error("no closing bracket of an array")
 					end
 				end
 				pos = newpos+1
@@ -386,27 +560,34 @@ local function newparser(src, saxtbl)
 				end
 			end
 		end
+
 		pos = pos+1
+		rec_depth = rec_depth - 1
 		return sax_endarray()
 	end
 
 	-- objects
 	local function f_obj()
+		rec_depth = rec_depth + 1
+		if rec_depth > 1000 then
+			parse_error('too deeply nested json (> 1000)')
+		end
 		sax_startobject()
+
 		spaces()
-		if byte(json, pos) ~= 0x7D then -- check the closing bracket `}`, that consists an empty object
+		if byte(json, pos) ~= 0x7D then  -- check closing bracket '}' which means the object empty
 			local newpos
 			while true do
 				if byte(json, pos) ~= 0x22 then
-					parseerror("not key")
+					parse_error("not key")
 				end
 				pos = pos+1
-				f_str(true)
-				f, newpos = find(json, '^[ \n\r\t]*:[ \n\r\t]*', pos) -- check colon
+				f_str(true)  -- parse key
+				f, newpos = find(json, '^[ \n\r\t]*:[ \n\r\t]*', pos)  -- check colon
 				if not newpos then
-					spaces() -- since the current chunk can be ended, skip spaces toward following chunks
-					if byte(json, pos) ~= 0x3A then -- check colon again
-						parseerror("no colon after a key")
+					spaces()  -- read spaces through chunks
+					if byte(json, pos) ~= 0x3A then  -- check colon again
+						parse_error("no colon after a key")
 					end
 					pos = pos+1
 					spaces()
@@ -416,26 +597,26 @@ local function newparser(src, saxtbl)
 				if pos > jsonlen then
 					spaces()
 				end
-				f = dispatcher[byte(json, pos)] -- parse value
+				f = dispatcher[byte(json, pos)]
 				pos = pos+1
-				f()
-				f, newpos = find(json, '^[ \n\r\t]*,[ \n\r\t]*', pos) -- check comma
+				f()  -- parse value
+				f, newpos = find(json, '^[ \n\r\t]*,[ \n\r\t]*', pos)  -- check comma
 				if not newpos then
-					f, newpos = find(json, '^[ \n\r\t]*}', pos) -- check closing bracket
+					f, newpos = find(json, '^[ \n\r\t]*}', pos)  -- check closing bracket
 					if newpos then
 						pos = newpos
 						break
 					end
-					spaces() -- since the current chunk can be ended, skip spaces toward following chunks
+					spaces()  -- read spaces through chunks
 					local c = byte(json, pos)
-					if c == 0x2C then -- check comma again
+					if c == 0x2C then  -- check comma again
 						pos = pos+1
 						spaces()
 						newpos = pos-1
-					elseif c == 0x7D then -- check closing bracket again
+					elseif c == 0x7D then  -- check closing bracket again
 						break
 					else
-						parseerror("no closing bracket of an object")
+						parse_error("no closing bracket of an object")
 					end
 				end
 				pos = newpos+1
@@ -444,23 +625,34 @@ local function newparser(src, saxtbl)
 				end
 			end
 		end
+
 		pos = pos+1
+		rec_depth = rec_depth - 1
 		return sax_endobject()
 	end
 
 	--[[
-		The jump table to dispatch a parser for a value, indexed by the code of the value's first char.
+		The jump table to dispatch a parser for a value,
+		indexed by the code of the value's first char.
 		Key should be non-nil.
 	--]]
 	dispatcher = {
-		       f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
-		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
-		f_err, f_err, f_str, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_mns, f_err, f_err,
-		f_zro, f_num, f_num, f_num, f_num, f_num, f_num, f_num, f_num, f_num, f_err, f_err, f_err, f_err, f_err, f_err,
-		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
-		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_ary, f_err, f_err, f_err, f_err,
-		f_err, f_err, f_err, f_err, f_err, f_err, f_fls, f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_nul, f_err,
-		f_err, f_err, f_err, f_err, f_tru, f_err, f_err, f_err, f_err, f_err, f_err, f_obj, f_err, f_err, f_err, f_err,
+		       f_err, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_str, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_mns, f_err, f_err,
+		f_zro, f_num, f_num, f_num, f_num, f_num, f_num, f_num,
+		f_num, f_num, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_ary, f_err, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_fls, f_err,
+		f_err, f_err, f_err, f_err, f_err, f_err, f_nul, f_err,
+		f_err, f_err, f_err, f_err, f_tru, f_err, f_err, f_err,
+		f_err, f_err, f_err, f_obj, f_err, f_err, f_err, f_err,
 	}
 	dispatcher[0] = f_err
 
@@ -468,6 +660,7 @@ local function newparser(src, saxtbl)
 		public funcitons
 	--]]
 	local function run()
+		rec_depth = 0
 		spaces()
 		f = dispatcher[byte(json, pos)]
 		pos = pos+1
