@@ -1,2 +1,12 @@
-vendor/lunajson/rockspecs
-vendor/lunajson/test
+# Internal files
+/.cht
+
+# LunaJSON
+/vendor/lunajson/rockspecs
+/vendor/lunajson/test
+/vendor/lunajson/.circleci
+/vendor/lunajson/bench
+/vendor/lunajson/ci
+/vendor/lunajson/logo
+/vendor/lunajson/result
+/vendor/lunajson/util
