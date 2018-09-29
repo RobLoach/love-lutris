@@ -106,8 +106,10 @@ end
 function launchGame(slug)
 	if (slug == 'quit') then
 		lib.event.quit(0)
+	elseif slug == '' then
+		os.execute('lutris &')
 	else
-		os.execute('lutris lutris:' .. game.slug .. ' &')
+		os.execute('lutris lutris:rungame/' .. slug .. ' &')
 		--local f = io.popen('lutris lutris:' .. slug)
 		--f:close()
 	end
